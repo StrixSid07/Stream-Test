@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Client Video Streaming</title>
+  </head>
+  <body>
+    <h2>Join Live Video Streaming</h2>
+    <input id="roomId" placeholder="Enter Room ID" />
+    <button onclick="joinRoom()">Join Room</button>
+    <img id="liveVideo" alt="Live Stream" />
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+
+    <script>
+      const socket = io();
+
+      function joinRoom() {
+        const roomId = document.getElementById("roomId").value;
+        socket.emit("join-room", roomId);
+      }
+
+      socket.on("host-not-connected", (data) => {
+        alert(data.message);
+      });
+
+      socket.on("joined-room", (data) => {
+        alert(data.message);
+      });
+
+      socket.on("video-frame", (data) => {
+        const blob = new Blob([data.frameData], { type: "image/jpeg" });
+        const url = URL.createObjectURL(blob);
+        document.getElementById("liveVideo").src = url;
+      });
+
+      socket.on("host-disconnected", (data) => {
+        alert(data.message);
+        document.getElementById("liveVideo").src = "";
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Host - Live Video Streaming</title>
+  </head>
+  <body>
+    <h2>Host Live Streaming</h2>
+    <input id="roomId" placeholder="Enter Room ID" />
+    <button onclick="startStreaming()">Start Streaming</button>
+    <video id="hostVideo" autoplay muted></video>
+
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    <script>
+      const socket = io();
+      let mediaStream;
+      let roomId;
+      let frameInterval = 200;
+      let isStreaming = false;
+
+      async function startStreaming() {
+        roomId = document.getElementById("roomId").value;
+
+        if (!roomId) {
+          alert("Please enter a Room ID.");
+          return;
+        }
+
+        try {
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 360 },
+            },
+            audio: false,
+          });
+
+          const videoElement = document.getElementById("hostVideo");
+          videoElement.srcObject = mediaStream;
+
+          socket.emit("host-connect", roomId);
+          isStreaming = true;
+          startSendingFrames();
+        } catch (error) {
+          console.error("Error accessing the camera:", error);
+          alert("Failed to access camera.");
+        }
+      }
+
+      function startSendingFrames() {
+        const videoElement = document.getElementById("hostVideo");
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        const sendFrame = () => {
+          if (mediaStream.active && isStreaming) {
+            canvas.width = 640;
+            canvas.height = 360;
+            context.drawImage(videoElement, 0, 0, 640, 360);
+
+            canvas.toBlob(
+              (blob) => {
+                if (blob) {
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    const byteArray = new Uint8Array(reader.result);
+
+                    socket.emit("video-frame", {
+                      roomId,
+                      frame: byteArray,
+                    });
+                  };
+                  reader.readAsArrayBuffer(blob);
+                }
+              },
+              "image/jpeg",
+              0.6
+            );
+          }
+        };
+
+        setInterval(sendFrame, frameInterval);
+      }
+
+      socket.on("bitrate-adjust", (data) => {
+        frameInterval = data.interval;
+        console.log(`🔄 Adjusting frame rate to ${1000 / frameInterval} FPS`);
+      });
+
+      socket.on("host-connected", (data) => {
+        console.log(data.message);
+      });
+
+      socket.on("host-disconnected", (data) => {
+        alert(data.message);
+        isStreaming = false;
+      });
+    </script>
+  </body>
+</html>

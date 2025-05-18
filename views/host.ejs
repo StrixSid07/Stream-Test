@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Host - Live Video Streaming</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+  </head>
+  <body class="bg-gray-100 min-h-screen flex items-center justify-center p-6">
+    <div
+      class="w-full max-w-xl bg-white rounded-2xl shadow-lg p-8 space-y-6 transition-all duration-300"
+    >
+      <h2 class="text-2xl font-semibold text-center text-purple-700">
+        Host Live Video Stream
+      </h2>
+
+      <div class="flex flex-col sm:flex-row gap-4 items-center justify-between">
+        <input
+          id="roomId"
+          type="text"
+          placeholder="Enter Room ID"
+          class="w-full sm:flex-1 px-4 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+        />
+        <button
+          onclick="startStreaming()"
+          class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-md shadow transition"
+        >
+          Start Streaming
+        </button>
+      </div>
+
+      <div
+        class="w-full aspect-video bg-black rounded-md overflow-hidden shadow-inner"
+      >
+        <video
+          id="hostVideo"
+          autoplay
+          muted
+          class="w-full h-full object-cover rounded-md"
+        ></video>
+      </div>
+    </div>
+
+    <script>
+      const socket = io();
+      let mediaStream;
+      let roomId;
+      let frameInterval = 200;
+      let isStreaming = false;
+
+      async function startStreaming() {
+        roomId = document.getElementById("roomId").value.trim();
+
+        if (!roomId) {
+          alert("Please enter a Room ID.");
+          return;
+        }
+
+        try {
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 640 },
+              height: { ideal: 360 },
+            },
+            audio: false,
+          });
+
+          const videoElement = document.getElementById("hostVideo");
+          videoElement.srcObject = mediaStream;
+
+          socket.emit("host-connect", roomId);
+          isStreaming = true;
+          startSendingFrames();
+        } catch (error) {
+          console.error("Error accessing the camera:", error);
+          alert("Failed to access the camera.");
+        }
+      }
+
+      function startSendingFrames() {
+        const videoElement = document.getElementById("hostVideo");
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+
+        const sendFrame = () => {
+          if (mediaStream.active && isStreaming) {
+            canvas.width = 640;
+            canvas.height = 360;
+            context.drawImage(videoElement, 0, 0, 640, 360);
+
+            canvas.toBlob(
+              (blob) => {
+                if (blob) {
+                  const reader = new FileReader();
+                  reader.onloadend = () => {
+                    const byteArray = new Uint8Array(reader.result);
+                    socket.emit("video-frame", {
+                      roomId,
+                      frame: byteArray,
+                    });
+                  };
+                  reader.readAsArrayBuffer(blob);
+                }
+              },
+              "image/jpeg",
+              0.6
+            );
+          }
+        };
+
+        setInterval(sendFrame, frameInterval);
+      }
+
+      socket.on("bitrate-adjust", (data) => {
+        frameInterval = data.interval;
+        console.log(
+          `🔄 Adjusting frame rate to ${Math.round(1000 / frameInterval)} FPS`
+        );
+      });
+
+      socket.on("host-connected", (data) => {
+        console.log(data.message);
+      });
+
+      socket.on("host-disconnected", (data) => {
+        alert(data.message);
+        isStreaming = false;
+      });
+    </script>
+  </body>
+</html>
