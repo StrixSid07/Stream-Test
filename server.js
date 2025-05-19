@@ -22,6 +22,10 @@ app.get("/host", (req, res) => {
   res.render("host");
 });
 
+app.get("/test", (req, res) => {
+  res.send("test");
+});
+
 handleSocketEvents(io);
 const PORT = 5000;
 server.listen(PORT, () => {
